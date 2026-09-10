@@ -10,6 +10,11 @@ type JwtHeader = { alg: string; kid: string };
 type JwtClaims = { aud: string | string[]; exp: number; iss: string; oid?: string; sub: string; tid?: string; preferred_username?: string };
 type Jwk = JsonWebKey & { kid: string };
 type Lead = Record<string, unknown> & { person_id: string; campaign_id: number; became_hot_at?: string | null };
+type Prospect = {
+  campaign_id: number; person_id: string; name?: string | null; email?: string | null;
+  phone?: string | null; job_title?: string | null; company_name?: string | null;
+  company_domain?: string | null; linkedin_url?: string | null; country?: string | null;
+};
 
 const EXPLEE_BASE = 'https://api.explee.com/public/api/v1';
 const PROJECT_ID = 34448;
@@ -99,8 +104,28 @@ async function handle(request: Request, env: Env) {
   const user = await verifyUser(request, env);
   const url = new URL(request.url);
   if (url.pathname === '/api/leads' && request.method === 'GET') {
-    const { results } = await env.DB.prepare(`SELECT campaign_id,person_id,name,email,phone,job_title,company_name,company_domain,linkedin_url,country,why_hot,became_hot_at,status FROM leads ORDER BY became_hot_at DESC`).all();
-    return json({ leads: results }, env);
+    const limit = Math.min(250, Math.max(1, Number(url.searchParams.get('limit')) || 100));
+    const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+    const query = url.searchParams.get('q')?.trim().slice(0, 200) || '';
+    const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
+    const where = query ? `WHERE name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR company_name LIKE ? ESCAPE '\\' OR job_title LIKE ? ESCAPE '\\'` : '';
+    const bindings = query ? [pattern, pattern, pattern, pattern] : [];
+    const { results } = await env.DB.prepare(`SELECT campaign_id,person_id,name,email,phone,job_title,company_name,company_domain,linkedin_url,country,why_hot,became_hot_at,status FROM leads ${where} ORDER BY CASE WHEN status = 'Prospect' THEN 1 ELSE 0 END, became_hot_at DESC, name ASC LIMIT ? OFFSET ?`).bind(...bindings, limit, offset).all();
+    const count = await env.DB.prepare(`SELECT COUNT(*) AS total FROM leads ${where}`).bind(...bindings).first<{ total: number }>();
+    return json({ leads: results, total: count?.total || 0, limit, offset }, env);
+  }
+  if (url.pathname === '/api/prospects/import' && request.method === 'POST') {
+    const body = await request.json<{ prospects?: Prospect[] }>();
+    if (!Array.isArray(body.prospects) || body.prospects.length < 1 || body.prospects.length > 250) return json({ error: 'Send 1 to 250 prospects per batch.' }, env, 422);
+    const statements = body.prospects.map((prospect) => {
+      if (prospect.campaign_id !== 151855 || !prospect.person_id) throw new Response('Invalid Enterprise HR prospect.', { status: 422 });
+      return env.DB.prepare(`INSERT INTO leads (campaign_id, person_id, name, email, phone, job_title, company_name, company_domain, linkedin_url, country, why_hot, became_hot_at, status, raw_json, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'Prospect', ?, datetime('now'))
+        ON CONFLICT(campaign_id, person_id) DO UPDATE SET name=excluded.name,email=COALESCE(leads.email,excluded.email),phone=COALESCE(leads.phone,excluded.phone),job_title=excluded.job_title,company_name=excluded.company_name,company_domain=excluded.company_domain,linkedin_url=excluded.linkedin_url,country=excluded.country,raw_json=excluded.raw_json,updated_at=datetime('now')`)
+        .bind(151855, String(prospect.person_id), prospect.name ?? null, prospect.email ?? null, prospect.phone ?? null, prospect.job_title ?? null, prospect.company_name ?? null, prospect.company_domain ?? null, prospect.linkedin_url ?? null, prospect.country ?? null, JSON.stringify(prospect));
+    });
+    await env.DB.batch(statements);
+    return json({ imported: statements.length }, env);
   }
   if (url.pathname === '/api/settings' && request.method === 'GET') {
     const row = await env.DB.prepare('SELECT instruction, example, signature FROM settings WHERE user_id = ?').bind(user.id).first();
