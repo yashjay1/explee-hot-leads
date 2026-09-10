@@ -122,24 +122,6 @@ export default function Home() {
     void Promise.resolve(context.registerTool({ name: 'list_hot_leads', title: 'List hot leads', description: 'Read the hot leads currently shown in Signal Desk.', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, untrustedContentHint: true }, execute: () => ({ leads: filtered.map(({ name, email, phone, company_name, why_hot }) => ({ name, email, phone, company_name, why_hot })) }) }, { signal: lifecycle.signal })).catch(() => undefined);
     return () => lifecycle.abort();
   }, [filtered]);
-  useEffect(() => {
-    if (!idToken) return;
-    const importBatch = async () => {
-      const node = document.getElementById('signal-desk-import-data');
-      if (!node?.textContent) return;
-      try {
-        const prospects = JSON.parse(node.textContent) as Lead[];
-        const response = await authedFetch('/api/prospects/import', { method: 'POST', body: JSON.stringify({ prospects }) });
-        if (!response.ok) throw new Error(`Import failed (${response.status}).`);
-        node.dataset.status = 'complete';
-      } catch (error) {
-        node.dataset.status = error instanceof Error ? error.message : 'Import failed.';
-      }
-    };
-    document.addEventListener('signal-desk-import', importBatch);
-    return () => document.removeEventListener('signal-desk-import', importBatch);
-  }, [authedFetch, idToken]);
-
   async function connectMicrosoft() {
     try {
       const client = await getMsal(), result = await client.loginPopup({ scopes: ['User.Read', 'Mail.Send'] });
@@ -179,8 +161,22 @@ export default function Home() {
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Email could not be sent.'); }
     finally { setSending(false); }
   }
+  async function importProspectBatch() {
+    const node = document.getElementById('signal-desk-import-data') as HTMLTextAreaElement | null;
+    if (!node?.value) return;
+    node.dataset.status = 'pending';
+    try {
+      const prospects = JSON.parse(node.value) as Lead[];
+      const response = await authedFetch('/api/prospects/import', { method: 'POST', body: JSON.stringify({ prospects }) });
+      if (!response.ok) throw new Error(`Import failed (${response.status}).`);
+      node.dataset.status = 'complete';
+    } catch (error) {
+      node.dataset.status = error instanceof Error ? error.message : 'Import failed.';
+    }
+  }
 
   return <main className="app-shell">
+    <div className="import-bridge" aria-hidden="true"><textarea id="signal-desk-import-data" tabIndex={-1} /><button id="signal-desk-import-trigger" tabIndex={-1} onClick={() => void importProspectBatch()}>Import</button></div>
     <aside className="sidebar">
       <div className="brand-mark"><Flame size={19} strokeWidth={2.4} /></div>
       <nav aria-label="Main navigation"><button className={view === 'leads' ? 'nav-item active' : 'nav-item'} onClick={() => setView('leads')} aria-label="Enterprise HR leads"><UserRound size={19} /></button><button className={view === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setView('settings')} aria-label="Settings"><Settings2 size={19} /></button></nav>
@@ -199,5 +195,5 @@ export default function Home() {
         {selected && <aside className="composer" aria-label={`Lead details for ${selected.name}`}><div className="composer-head"><div><span className="hot-label"><Flame size={13} /> {selected.why_hot ? 'HOT LEAD' : 'PROSPECT'}</span><h2>{selected.name || 'Unknown lead'}</h2><p>{selected.job_title || 'Contact'} at {selected.company_name || 'Unknown company'}</p></div>{selected.linkedin_url && <a href={selected.linkedin_url} target="_blank" rel="noreferrer" aria-label="Open LinkedIn"><ArrowUpRight size={17} /></a>}</div><div className="verified-contact"><div><Mail size={16} /><span><small>EMAIL</small><strong>{selected.email || 'Not enriched by Explee'}</strong></span></div><div><Phone size={16} /><span><small>PHONE</small><strong>{selected.phone || 'Not enriched by Explee'}</strong></span></div></div><div className="reply-card"><div className="reply-label">{selected.why_hot ? <>THEIR REPLY <span>{formatWhen(selected.became_hot_at)}</span></> : 'SOURCE'}</div><blockquote>{selected.why_hot ? `“${selected.why_hot}”` : 'Enterprise HR teams campaign'}</blockquote></div><div className="draft-head"><div><FilePenLine size={16} /><strong>Your draft</strong><span>Editable</span></div><button onClick={() => setDraft(makeDraft(selected, settings))}><Sparkles size={14} /> Regenerate</button></div><div className="mail-field"><span>TO</span><strong>{selected.email || 'Email not available yet'}</strong></div><div className="mail-field"><span>SUBJECT</span><Input value={subject} onChange={(event) => setSubject(event.target.value)} aria-label="Email subject" /></div><Textarea className="draft-area" value={draft} onChange={(event) => setDraft(event.target.value)} aria-label="Email draft" /><div className="send-footer"><div>{account ? <><span className="connected-dot" />Sending from <strong>{account.username}</strong></> : <><CircleAlert size={14} /> Connect Outlook before sending</>}</div><Button className="send-button" onClick={() => void sendMail()} disabled={sending || !selected.email}><Send size={15} /> {sending ? 'Sending…' : 'Review & send'}</Button></div></aside>}
       </div>}
     </section>
-  </main>;
+</main>;
 }
