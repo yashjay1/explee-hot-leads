@@ -122,6 +122,16 @@ export default function Home() {
     void Promise.resolve(context.registerTool({ name: 'list_hot_leads', title: 'List hot leads', description: 'Read the hot leads currently shown in Signal Desk.', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, untrustedContentHint: true }, execute: () => ({ leads: filtered.map(({ name, email, phone, company_name, why_hot }) => ({ name, email, phone, company_name, why_hot })) }) }, { signal: lifecycle.signal })).catch(() => undefined);
     return () => lifecycle.abort();
   }, [filtered]);
+  useEffect(() => {
+    if (!idToken) return;
+    const bridge = window as Window & { signalDeskImport?: (prospects: Lead[]) => Promise<unknown> };
+    bridge.signalDeskImport = async (prospects) => {
+      const response = await authedFetch('/api/prospects/import', { method: 'POST', body: JSON.stringify({ prospects }) });
+      if (!response.ok) throw new Error(`Import failed (${response.status}).`);
+      return response.json();
+    };
+    return () => { delete bridge.signalDeskImport; };
+  }, [authedFetch, idToken]);
 
   async function connectMicrosoft() {
     try {
