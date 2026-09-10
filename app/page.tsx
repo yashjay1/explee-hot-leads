@@ -50,7 +50,9 @@ function formatWhen(value: string | null) {
 async function getMsal() {
   if (!microsoftClientId) throw new Error('Microsoft sign-in is not configured yet.');
   if (!msal) {
-    msal = new PublicClientApplication({ auth: { clientId: microsoftClientId, authority: `https://login.microsoftonline.com/${microsoftTenantId}`, redirectUri: window.location.href.split('#')[0] }, cache: { cacheLocation: 'localStorage' } });
+    // Keep build/version query strings out of the OAuth redirect URI. Entra requires
+    // an exact match, while the site may be opened with ?v=... during deployments.
+    msal = new PublicClientApplication({ auth: { clientId: microsoftClientId, authority: `https://login.microsoftonline.com/${microsoftTenantId}`, redirectUri: `${window.location.origin}${window.location.pathname}` }, cache: { cacheLocation: 'localStorage' } });
     await msal.initialize();
   }
   return msal;
