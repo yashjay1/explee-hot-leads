@@ -1,0 +1,16 @@
+name = "explee-signal-desk-api"
+main = "index.ts"
+compatibility_date = "2026-09-01"
+
+[triggers]
+crons = ["*/10 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "explee-signal-desk"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[vars]
+MICROSOFT_CLIENT_ID = "REPLACE_WITH_ENTRA_APP_CLIENT_ID"
+MICROSOFT_TENANT_ID = "REPLACE_WITH_ENTRA_TENANT_ID"
+ALLOWED_ORIGIN = "https://REPLACE.github.io"

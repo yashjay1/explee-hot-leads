@@ -1,0 +1,49 @@
+name: Deploy interface to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Choose the GitHub Pages path
+        run: |
+          if [ "${{ github.event.repository.name }}" = "${{ github.repository_owner }}.github.io" ]; then
+            echo "SITE_BASE_PATH=" >> "$GITHUB_ENV"
+          else
+            echo "SITE_BASE_PATH=/${{ github.event.repository.name }}" >> "$GITHUB_ENV"
+          fi
+      - name: Build
+        run: npm run build:pages
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.API_BASE_URL }}
+          NEXT_PUBLIC_MICROSOFT_CLIENT_ID: ${{ vars.MICROSOFT_CLIENT_ID }}
+          NEXT_PUBLIC_MICROSOFT_TENANT_ID: ${{ vars.MICROSOFT_TENANT_ID }}
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist/client
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

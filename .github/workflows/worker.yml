@@ -1,0 +1,32 @@
+name: Deploy secure sync service
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Fill deployment settings
+        run: |
+          sed -i "s|REPLACE_WITH_D1_DATABASE_ID|${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}|g" worker/wrangler.toml
+          sed -i "s|REPLACE_WITH_ENTRA_APP_CLIENT_ID|${{ vars.MICROSOFT_CLIENT_ID }}|g" worker/wrangler.toml
+          sed -i "s|REPLACE_WITH_ENTRA_TENANT_ID|${{ vars.MICROSOFT_TENANT_ID }}|g" worker/wrangler.toml
+          sed -i "s|https://REPLACE.github.io|${{ vars.PAGES_ORIGIN }}|g" worker/wrangler.toml
+      - name: Apply database schema
+        run: npx wrangler d1 execute explee-signal-desk --remote --file worker/schema.sql --config worker/wrangler.toml
+        env: &cloudflare
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Store Explee key in Cloudflare
+        run: printf '%s' "${{ secrets.EXPLEE_API_KEY }}" | npx wrangler secret put EXPLEE_API_KEY --config worker/wrangler.toml
+        env: *cloudflare
+      - name: Deploy Worker
+        run: npx wrangler deploy --config worker/wrangler.toml
+        env: *cloudflare
