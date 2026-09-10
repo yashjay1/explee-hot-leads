@@ -1,9 +1,9 @@
 'use client';
 /* oxlint-disable react(react-compiler) -- MSAL synchronizes signed-in state from the browser cache. */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { PublicClientApplication, type AccountInfo } from '@azure/msal-browser';
-import { ArrowUpRight, AtSign, Check, ChevronDown, CircleAlert, Clock3, FilePenLine, Flame, Mail, Phone, RefreshCw, Search, Send, Settings2, SlidersHorizontal, Sparkles, UserRound, X } from 'lucide-react';
+import { ArrowUpRight, AtSign, Check, ChevronDown, CircleAlert, Clock3, FilePenLine, Flame, Mail, Phone, RefreshCw, Search, Send, Settings2, SlidersHorizontal, Sparkles, Upload, UserRound, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -73,6 +73,7 @@ export default function Home() {
   const [graphToken, setGraphToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [notice, setNotice] = useState('');
   const [showAll, setShowAll] = useState(true);
   const selected = leads.find((lead) => leadKey(lead) === selectedKey) || leads[0];
@@ -176,6 +177,26 @@ export default function Home() {
       node.dataset.status = error instanceof Error ? error.message : 'Import failed.';
     }
   }
+  async function importProspectsFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setImporting(true);
+    try {
+      const payload = JSON.parse(await file.text()) as { prospects?: Lead[] };
+      const prospects = payload.prospects;
+      if (!Array.isArray(prospects) || prospects.length < 1) throw new Error('That file does not contain prospects.');
+      for (let offset = 0; offset < prospects.length; offset += 250) {
+        const batch = prospects.slice(offset, offset + 250);
+        const response = await authedFetch('/api/prospects/import', { method: 'POST', body: JSON.stringify({ prospects: batch }) });
+        if (!response.ok) throw new Error(`Import stopped at ${offset} (${response.status}).`);
+        setNotice(`Importing Enterprise HR prospects… ${Math.min(offset + batch.length, prospects.length)} of ${prospects.length}`);
+      }
+      await loadLeads();
+      setNotice(`Imported ${prospects.length.toLocaleString()} Enterprise HR prospects.`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not import prospects.'); }
+    finally { setImporting(false); }
+  }
 
   return <main className="app-shell">
     <div className="import-bridge" aria-hidden="true"><textarea id="signal-desk-import-data" tabIndex={-1} /><button id="signal-desk-import-trigger" tabIndex={-1} onClick={() => void importProspectBatch()}>Import</button></div>
@@ -185,7 +206,7 @@ export default function Home() {
       <div className="sidebar-spacer" /><div className="avatar">{account?.name?.[0] || 'Y'}</div>
     </aside>
     <section className="workspace">
-      <header className="topbar"><div><div className="eyebrow"><span className="live-dot" /> EXPLEE · ENTERPRISE HR</div><h1>{view === 'leads' ? 'Enterprise HR leads' : 'Draft settings'}</h1></div><div className="top-actions"><div className="sync-copy"><strong>{apiBase ? 'Hot-lead sync on' : 'Preview mode'}</strong><span>{apiBase ? 'Every 10 minutes' : 'Connect backend to go live'}</span></div><Button variant="outline" className="quiet-button" onClick={() => void syncNow()} disabled={loading || !idToken}><RefreshCw size={15} className={loading ? 'spin' : ''} /> Sync now</Button><Button className="connect-button" onClick={() => void connectMicrosoft()}><span className="microsoft-mark"><i /><i /><i /><i /></span>{account ? account.username : 'Connect Microsoft 365'}</Button></div></header>
+      <header className="topbar"><div><div className="eyebrow"><span className="live-dot" /> EXPLEE · ENTERPRISE HR</div><h1>{view === 'leads' ? 'Enterprise HR leads' : 'Draft settings'}</h1></div><div className="top-actions"><div className="sync-copy"><strong>{apiBase ? 'Hot-lead sync on' : 'Preview mode'}</strong><span>{apiBase ? 'Every 10 minutes' : 'Connect backend to go live'}</span></div><label className="import-button"><Upload size={15} /> {importing ? 'Importing…' : 'Import prospects'}<input type="file" accept="application/json,.json" onChange={(event) => void importProspectsFile(event)} disabled={importing || !idToken} /></label><Button variant="outline" className="quiet-button" onClick={() => void syncNow()} disabled={loading || !idToken}><RefreshCw size={15} className={loading ? 'spin' : ''} /> Sync now</Button><Button className="connect-button" onClick={() => void connectMicrosoft()}><span className="microsoft-mark"><i /><i /><i /><i /></span>{account ? account.username : 'Connect Microsoft 365'}</Button></div></header>
       {notice && <output className="notice"><Check size={15} /> {notice}<button onClick={() => setNotice('')} aria-label="Dismiss"><X size={14} /></button></output>}
       {view === 'settings' ? <section className="settings-page">
         <div className="settings-intro"><span className="settings-icon"><Sparkles size={20} /></span><div><h2>Shape every first draft</h2><p>Signal Desk uses your example as a reusable reply template. You can always edit the result before sending.</p></div></div>
