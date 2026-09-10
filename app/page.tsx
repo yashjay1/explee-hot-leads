@@ -29,9 +29,9 @@ const defaultSettings: DraftSettings = {
   example: 'Hi {{first_name}},\n\nThanks for getting back to me — happy to share more. Would Tuesday at 10:00 or Wednesday at 14:00 work for a quick conversation?\n\nBest,\n{{signature}}',
   signature: 'Yash',
 };
-const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '') || '';
-const microsoftClientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID || '';
-const microsoftTenantId = process.env.NEXT_PUBLIC_MICROSOFT_TENANT_ID || 'common';
+const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '') || 'https://explee-signal-desk-api.yashjay2003.workers.dev';
+const microsoftClientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID || 'f9e05546-b4fb-45a6-888c-bbb4593a03cf';
+const microsoftTenantId = process.env.NEXT_PUBLIC_MICROSOFT_TENANT_ID || '50469384-abf0-4337-b9fe-6c48161ec38c';
 let msal: PublicClientApplication | null = null;
 
 function leadKey(lead: Lead) { return `${lead.campaign_id}:${lead.person_id}`; }
