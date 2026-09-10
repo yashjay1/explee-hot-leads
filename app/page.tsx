@@ -124,13 +124,20 @@ export default function Home() {
   }, [filtered]);
   useEffect(() => {
     if (!idToken) return;
-    const bridge = window as Window & { signalDeskImport?: (prospects: Lead[]) => Promise<unknown> };
-    bridge.signalDeskImport = async (prospects) => {
-      const response = await authedFetch('/api/prospects/import', { method: 'POST', body: JSON.stringify({ prospects }) });
-      if (!response.ok) throw new Error(`Import failed (${response.status}).`);
-      return response.json();
+    const importBatch = async () => {
+      const node = document.getElementById('signal-desk-import-data');
+      if (!node?.textContent) return;
+      try {
+        const prospects = JSON.parse(node.textContent) as Lead[];
+        const response = await authedFetch('/api/prospects/import', { method: 'POST', body: JSON.stringify({ prospects }) });
+        if (!response.ok) throw new Error(`Import failed (${response.status}).`);
+        node.dataset.status = 'complete';
+      } catch (error) {
+        node.dataset.status = error instanceof Error ? error.message : 'Import failed.';
+      }
     };
-    return () => { delete bridge.signalDeskImport; };
+    document.addEventListener('signal-desk-import', importBatch);
+    return () => document.removeEventListener('signal-desk-import', importBatch);
   }, [authedFetch, idToken]);
 
   async function connectMicrosoft() {
